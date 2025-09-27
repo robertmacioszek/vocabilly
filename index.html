@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vokabeltrainer</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="card">
+        <h1>Vokabeltrainer</h1>
+        <div id="progress">Fortschritt: 0/0</div>
+        <div id="import-export">
+            <button id="toggle-import" class="btn" style="width:100%; margin-bottom:8px;">Vokabeln importieren ▲</button>
+            <div id="import-export-content" class="collapsed">
+                <label for="import-text" style="font-weight:500;">Vokabeln als JSON einfügen:</label>
+                <textarea id="import-text" placeholder='[{"de":"Haus","en":"house"},{"de":"Baum","en":"tree"}]'></textarea>
+                <button id="import-btn">Importieren</button>
+            </div>
+        </div>
+        <div id="sessions-list" style="margin-bottom:24px;">
+            <button id="toggle-sessions" class="btn" style="width:100%; margin-bottom:8px;">Importierte Sessions ▼</button>
+            <div id="sessions-list-content">
+                <h3>Importierte Sessions</h3>
+                <ul id="sessions-ul" style="list-style:none; padding:0;"></ul>
+            </div>
+        </div>
+        <div id="training-session" style="display:none;">
+            <div id="card">
+                <div id="word" style="font-size:1.4em; margin:24px 0; text-align:center;"></div>
+                <input type="text" id="user-input" placeholder="Englische Übersetzung (optional)">
+                <button id="show-answer" class="btn" style="width:100%; margin-bottom:12px;">Antwort zeigen</button>
+                <div id="answer-buttons" style="display:flex; justify-content:space-between; margin-bottom:16px;">
+                    <button id="btn-correct" class="btn">Richtig</button>
+                    <button id="btn-wrong" class="btn">Falsch</button>
+                </div>
+                <div id="feedback" style="text-align:center; min-height:24px; font-size:1em;"></div>
+                <button id="cancel-session" class="btn" style="width:100%; background:#eee; color:#333;">Session beenden</button>
+            </div>
+        </div>
+        <div id="session-end" style="display:none;">
+            <h2>Training abgeschlossen!</h2>
+            <div id="final-score"></div>
+            <button id="restart-btn">Nochmal üben</button>
+        </div>
+    </div>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js');
+        }
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
