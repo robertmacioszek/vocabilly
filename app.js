@@ -7,8 +7,10 @@ let correctCards = new Set();
 let currentIndex = 0;
 let sessions = {};
 let currentSessionName = null;
+let currentTrainingSessionNames = [];
 let answerShown = false;
 let isAdminUser = false;
+let selectedSessionNames = new Set();
 
 const trainingSession = document.getElementById('training-session');
 const wordDiv = document.getElementById('word');
@@ -21,6 +23,7 @@ const sessionEndDiv = document.getElementById('session-end');
 const finalScoreDiv = document.getElementById('final-score');
 const restartBtn = document.getElementById('restart-btn');
 const sessionsUl = document.getElementById('sessions-ul');
+const startSelectedSessionsBtn = document.getElementById('start-selected-sessions-btn');
 const showAnswerBtn = document.getElementById('show-answer');
 const cancelSessionBtn = document.getElementById('cancel-session');
 const answerButtonsDiv = document.getElementById('answer-buttons');
@@ -73,6 +76,10 @@ function updateAdminUi(enabled, message) {
     adminStatus.textContent = message;
 }
 
+function updateStartSelectedButtonState() {
+    startSelectedSessionsBtn.disabled = selectedSessionNames.size === 0;
+}
+
 function persistCredentials() {
     localStorage.setItem('supabaseUrl', supabaseUrlInput.value.trim());
     localStorage.setItem('supabaseAnonKey', supabaseKeyInput.value.trim());
@@ -105,7 +112,9 @@ function createClientFromInput() {
 
 function resetTrainingState() {
     sessions = {};
+    selectedSessionNames = new Set();
     currentSessionName = null;
+    currentTrainingSessionNames = [];
     vocabList = [];
     sessionCards = [];
     correctCards = new Set();
@@ -113,6 +122,7 @@ function resetTrainingState() {
     updateProgress();
     trainingSession.style.display = 'none';
     sessionEndDiv.style.display = 'none';
+    updateStartSelectedButtonState();
 }
 
 function refreshAdminSessionSelect() {
@@ -131,6 +141,7 @@ function refreshAdminSessionSelect() {
 function renderSessionsList() {
     sessionsUl.innerHTML = '';
     const names = Object.keys(sessions);
+    selectedSessionNames = new Set([...selectedSessionNames].filter(name => names.includes(name)));
 
     if (!names.length) {
         const li = document.createElement('li');
@@ -138,30 +149,57 @@ function renderSessionsList() {
         li.style.color = '#777';
         sessionsUl.appendChild(li);
         refreshAdminSessionSelect();
+        updateStartSelectedButtonState();
         return;
     }
 
     names.sort((a, b) => a.localeCompare(b)).forEach(name => {
         const li = document.createElement('li');
-        li.innerHTML = `
-            <span style="font-weight:500;">${name}</span>
-            <button data-name="${name}" class="start-session-btn" style="margin-left:8px;">Starten</button>
-            <span style="color:#888; margin-left:8px;">(${sessions[name].length} Vokabeln)</span>
-        `;
+        li.style.display = 'flex';
+        li.style.alignItems = 'center';
+        li.style.justifyContent = 'space-between';
+
+        const left = document.createElement('label');
+        left.style.display = 'flex';
+        left.style.alignItems = 'center';
+        left.style.gap = '8px';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'session-checkbox';
+        checkbox.dataset.name = name;
+        checkbox.checked = selectedSessionNames.has(name);
+
+        const title = document.createElement('span');
+        title.style.fontWeight = '500';
+        title.textContent = name;
+
+        left.appendChild(checkbox);
+        left.appendChild(title);
+
+        const count = document.createElement('span');
+        count.style.color = '#888';
+        count.textContent = `(${sessions[name].length} Vokabeln)`;
+
+        li.appendChild(left);
+        li.appendChild(count);
         sessionsUl.appendChild(li);
     });
 
-    sessionsUl.querySelectorAll('.start-session-btn').forEach(btn => {
-        btn.onclick = async () => {
-            try {
-                await startTrainingSession(btn.dataset.name);
-            } catch (error) {
-                alert(error.message);
+    sessionsUl.querySelectorAll('.session-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            const name = checkbox.dataset.name;
+            if (checkbox.checked) {
+                selectedSessionNames.add(name);
+            } else {
+                selectedSessionNames.delete(name);
             }
-        };
+            updateStartSelectedButtonState();
+        });
     });
 
     refreshAdminSessionSelect();
+    updateStartSelectedButtonState();
 }
 
 async function ensureClientAndSession() {
@@ -415,17 +453,21 @@ async function deleteSelectedSessionFromAdmin() {
     }
 
     delete sessions[selected];
+    selectedSessionNames.delete(selected);
     renderSessionsList();
-    if (currentSessionName === selected) {
+
+    if (currentTrainingSessionNames.includes(selected)) {
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'none';
         currentSessionName = null;
+        currentTrainingSessionNames = [];
         vocabList = [];
         sessionCards = [];
         correctCards = new Set();
         saveProgress();
         updateProgress();
     }
+
     adminSessionNameInput.value = '';
     adminJsonInput.value = '';
     adminStatus.textContent = `Session geloescht: ${selected}`;
@@ -534,13 +576,29 @@ function endSession() {
 }
 
 async function startTrainingSession(name) {
-    const selected = sessions[name];
-    if (!Array.isArray(selected) || !selected.length) {
-        throw new Error('Session ist leer oder nicht verfuegbar.');
+    await startTrainingSessionsByNames([name]);
+}
+
+async function startTrainingSessionsByNames(names) {
+    if (!Array.isArray(names) || names.length === 0) {
+        throw new Error('Bitte mindestens eine Session waehlen.');
     }
 
-    vocabList = selected;
-    currentSessionName = name;
+    const combined = [];
+    names.forEach(name => {
+        const selected = sessions[name];
+        if (Array.isArray(selected) && selected.length) {
+            combined.push(...selected);
+        }
+    });
+
+    if (!combined.length) {
+        throw new Error('Die ausgewaehlten Sessions sind leer oder nicht verfuegbar.');
+    }
+
+    vocabList = combined;
+    currentTrainingSessionNames = [...names];
+    currentSessionName = names.length === 1 ? names[0] : `${names.length} Sessions`;
     correctCards = new Set();
     saveProgress();
     currentIndex = 0;
@@ -565,6 +623,13 @@ loadSessionsBtn.addEventListener('click', async () => {
     try {
         await loadSessionsFromSupabase();
         await refreshAdminAccess();
+    } catch (error) {
+        alert(error.message);
+    }
+});
+startSelectedSessionsBtn.addEventListener('click', async () => {
+    try {
+        await startTrainingSessionsByNames([...selectedSessionNames]);
     } catch (error) {
         alert(error.message);
     }
@@ -664,6 +729,7 @@ cancelSessionBtn.addEventListener('click', () => {
     sessionCards = [];
     correctCards = new Set();
     currentSessionName = null;
+    currentTrainingSessionNames = [];
     showAnswerBtn.style.display = 'none';
     answerButtonsDiv.style.display = 'none';
     cancelSessionBtn.style.display = 'none';
@@ -674,8 +740,8 @@ cancelSessionBtn.addEventListener('click', () => {
 restartBtn.addEventListener('click', () => {
     correctCards.clear();
     saveProgress();
-    if (currentSessionName) {
-        startTrainingSession(currentSessionName).catch(error => alert(error.message));
+    if (currentTrainingSessionNames.length) {
+        startTrainingSessionsByNames(currentTrainingSessionNames).catch(error => alert(error.message));
     }
 });
 

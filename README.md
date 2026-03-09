@@ -142,8 +142,9 @@ Then open:
 1. Open the app in a browser.
 2. Enter Supabase URL, anon key, email, and password.
 3. Click `Sign in` / `Anmelden`.
-4. Load sessions and start one.
-5. Practice until all cards are marked correct.
+4. Load sessions and select one or more sessions with checkboxes.
+5. Click `Session(s) starten` to start a combined training run.
+6. Practice until all cards are marked correct.
 
 ## Admin Usage (Session Maintenance)
 1. Add your email to `public.app_admins`.
