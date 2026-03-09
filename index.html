@@ -42,6 +42,27 @@
             <ul id="sessions-ul" style="list-style:none; padding:0;"></ul>
         </section>
 
+        <section id="admin-panel" style="display:none; margin-bottom:24px;">
+            <h3>Admin: Session pflegen</h3>
+            <label for="admin-session-name-input">Session-Name:</label>
+            <input type="text" id="admin-session-name-input" placeholder="z. B. U1-IN">
+
+            <label for="admin-existing-session-select">Bestehende Session laden:</label>
+            <select id="admin-existing-session-select">
+                <option value="">Bitte waehlen</option>
+            </select>
+            <button id="admin-load-session-btn" class="btn full secondary">In Editor laden</button>
+
+            <label for="admin-json-input">Vokabeln (JSON Array):</label>
+            <textarea
+                id="admin-json-input"
+                rows="10"
+                placeholder='[{"lesson":"U1","section":"IN","de":"unterwegs","en":"on the move"}]'></textarea>
+
+            <button id="admin-save-session-btn" class="btn full">Session speichern/aktualisieren</button>
+            <div id="admin-status" class="status">Adminbereich nicht aktiv</div>
+        </section>
+
         <div id="training-session" style="display:none;">
             <div id="card">
                 <div id="word" style="font-size:1.4em; margin:24px 0; text-align:center;"></div>

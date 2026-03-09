@@ -11,6 +11,7 @@ The project started as a local JSON import trainer and now continues with a cent
 - Progress tracking during a session
 - Centralized session storage in Supabase (`public.sessions`)
 - Login-based access via Supabase Auth
+- Admin editor for creating/updating sessions by pasting JSON
 - Client-side persistence of connection/login fields in `localStorage`
 - Offline assets via service worker (for static app files)
 
@@ -29,22 +30,68 @@ create table if not exists public.sessions (
   words jsonb not null
 );
 
+create table if not exists public.app_admins (
+  email text primary key
+);
+
 alter table public.sessions enable row level security;
+alter table public.app_admins enable row level security;
 
 create policy "sessions_select_authenticated"
 on public.sessions
 for select
 to authenticated
 using (true);
+
+create policy "sessions_insert_admin"
+on public.sessions
+for insert
+to authenticated
+with check (
+  exists (
+    select 1
+    from public.app_admins a
+    where a.email = auth.jwt() ->> 'email'
+  )
+);
+
+create policy "sessions_update_admin"
+on public.sessions
+for update
+to authenticated
+using (
+  exists (
+    select 1
+    from public.app_admins a
+    where a.email = auth.jwt() ->> 'email'
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.app_admins a
+    where a.email = auth.jwt() ->> 'email'
+  )
+);
+
+create policy "app_admins_select_own_row"
+on public.app_admins
+for select
+to authenticated
+using (email = auth.jwt() ->> 'email');
 ```
 
 Example seed data:
 
 ```sql
 insert into public.sessions (name, words) values
-('Basic A1', '[{"de":"Haus","en":"house"},{"de":"Baum","en":"tree"}]'::jsonb),
-('Travel', '[{"de":"Flughafen","en":"airport"},{"de":"Koffer","en":"suitcase"}]'::jsonb)
+('U1-IN', '[{"lesson":"U1","section":"IN","de":"unterwegs","en":"on the move"},{"lesson":"U1","section":"IN","de":"das Reisen","en":"travelling (no pl)"}]'::jsonb),
+('Travel', '[{"lesson":"U2","section":"TR","de":"Flughafen","en":"airport"},{"lesson":"U2","section":"TR","de":"Koffer","en":"suitcase"}]'::jsonb)
 on conflict (name) do nothing;
+
+insert into public.app_admins (email) values
+('admin@example.com')
+on conflict (email) do nothing;
 ```
 
 ## Authentication Setup
@@ -85,3 +132,29 @@ Then open:
 3. Click `Sign in` / `Anmelden`.
 4. Load sessions and start one.
 5. Practice until all cards are marked correct.
+
+## Admin Usage (Session Maintenance)
+1. Add your email to `public.app_admins`.
+2. Sign in with that user.
+3. Open `Admin: Session pflegen`.
+4. Paste JSON in this format:
+
+```json
+[
+  {
+    "lesson": "U1",
+    "section": "IN",
+    "de": "unterwegs",
+    "en": "on the move"
+  },
+  {
+    "lesson": "U1",
+    "section": "IN",
+    "de": "das Reisen",
+    "en": "travelling (no pl)"
+  }
+]
+```
+
+5. Enter a session name and click `Session speichern/aktualisieren`.
+6. To edit an existing session, select it, click `In Editor laden`, edit JSON, and save again.

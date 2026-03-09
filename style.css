@@ -36,6 +36,21 @@ input[type="password"] {
     margin-bottom: 12px;
     box-sizing: border-box;
 }
+textarea,
+select {
+    width: 100%;
+    padding: 10px;
+    font-size: 1em;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    margin-bottom: 12px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+textarea {
+    min-height: 180px;
+    resize: vertical;
+}
 .btn {
     width: 48%;
     padding: 12px;
@@ -83,7 +98,18 @@ input[type="password"] {
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
+#admin-panel {
+    margin-bottom: 18px;
+    padding: 12px;
+    background: #f9f9f9;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
 #auth-box label {
+    display: block;
+    margin-bottom: 6px;
+}
+#admin-panel label {
     display: block;
     margin-bottom: 6px;
 }

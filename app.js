@@ -1,4 +1,4 @@
-// Vocabilly client logic with Supabase backend.
+// Vocabilly client logic with Supabase backend and admin editor.
 
 let supabaseClient = null;
 let vocabList = [];
@@ -8,6 +8,7 @@ let currentIndex = 0;
 let sessions = {};
 let currentSessionName = null;
 let answerShown = false;
+let isAdminUser = false;
 
 const trainingSession = document.getElementById('training-session');
 const wordDiv = document.getElementById('word');
@@ -33,6 +34,14 @@ const logoutBtn = document.getElementById('logout-btn');
 const loadSessionsBtn = document.getElementById('load-sessions-btn');
 const authStatus = document.getElementById('auth-status');
 
+const adminPanel = document.getElementById('admin-panel');
+const adminSessionNameInput = document.getElementById('admin-session-name-input');
+const adminExistingSessionSelect = document.getElementById('admin-existing-session-select');
+const adminLoadSessionBtn = document.getElementById('admin-load-session-btn');
+const adminJsonInput = document.getElementById('admin-json-input');
+const adminSaveSessionBtn = document.getElementById('admin-save-session-btn');
+const adminStatus = document.getElementById('admin-status');
+
 function saveProgress() {
     localStorage.setItem('correctCards', JSON.stringify(Array.from(correctCards)));
 }
@@ -54,6 +63,12 @@ function updateAuthUi(isLoggedIn, message) {
     logoutBtn.disabled = !isLoggedIn;
     loadSessionsBtn.disabled = !isLoggedIn;
     authStatus.textContent = message;
+}
+
+function updateAdminUi(enabled, message) {
+    isAdminUser = enabled;
+    adminPanel.style.display = enabled ? 'block' : 'none';
+    adminStatus.textContent = message;
 }
 
 function persistCredentials() {
@@ -98,6 +113,19 @@ function resetTrainingState() {
     sessionEndDiv.style.display = 'none';
 }
 
+function refreshAdminSessionSelect() {
+    adminExistingSessionSelect.innerHTML = '<option value="">Bitte waehlen</option>';
+
+    Object.keys(sessions)
+        .sort((a, b) => a.localeCompare(b))
+        .forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            adminExistingSessionSelect.appendChild(option);
+        });
+}
+
 function renderSessionsList() {
     sessionsUl.innerHTML = '';
     const names = Object.keys(sessions);
@@ -107,10 +135,11 @@ function renderSessionsList() {
         li.textContent = 'Keine Sessions geladen.';
         li.style.color = '#777';
         sessionsUl.appendChild(li);
+        refreshAdminSessionSelect();
         return;
     }
 
-    names.forEach(name => {
+    names.sort((a, b) => a.localeCompare(b)).forEach(name => {
         const li = document.createElement('li');
         li.innerHTML = `
             <span style="font-weight:500;">${name}</span>
@@ -129,48 +158,8 @@ function renderSessionsList() {
             }
         };
     });
-}
 
-async function login() {
-    const email = emailInput.value.trim();
-    const password = passwordInput.value;
-
-    if (!email || !password) {
-        alert('Bitte E-Mail und Passwort eingeben.');
-        return;
-    }
-
-    try {
-        const client = createClientFromInput();
-        persistCredentials();
-
-        const { error } = await client.auth.signInWithPassword({ email, password });
-        if (error) {
-            throw new Error(error.message || 'Anmeldung fehlgeschlagen.');
-        }
-
-        updateAuthUi(true, 'Angemeldet. Du kannst jetzt Sessions laden.');
-        await loadSessionsFromSupabase();
-    } catch (error) {
-        supabaseClient = null;
-        updateAuthUi(false, 'Nicht angemeldet');
-        alert(error.message);
-    }
-}
-
-async function logout() {
-    try {
-        if (supabaseClient) {
-            await supabaseClient.auth.signOut();
-        }
-    } catch (error) {
-        // Ignore sign-out errors and still clear local UI state.
-    }
-
-    supabaseClient = null;
-    resetTrainingState();
-    renderSessionsList();
-    updateAuthUi(false, 'Nicht angemeldet');
+    refreshAdminSessionSelect();
 }
 
 async function ensureClientAndSession() {
@@ -207,6 +196,190 @@ async function loadSessionsFromSupabase() {
     });
 
     renderSessionsList();
+}
+
+async function refreshAdminAccess() {
+    try {
+        const client = await ensureClientAndSession();
+        const { data: userData, error: userError } = await client.auth.getUser();
+
+        if (userError) {
+            throw new Error(userError.message || 'Benutzer konnte nicht geladen werden.');
+        }
+
+        const email = userData.user && userData.user.email;
+        if (!email) {
+            updateAdminUi(false, 'Kein Adminzugang.');
+            return;
+        }
+
+        const { count, error } = await client
+            .from('app_admins')
+            .select('*', { head: true, count: 'exact' })
+            .eq('email', email);
+
+        if (error) {
+            updateAdminUi(false, 'Adminpruefung fehlgeschlagen (app_admins Tabelle/POLICY pruefen).');
+            return;
+        }
+
+        if ((count || 0) > 0) {
+            updateAdminUi(true, `Admin aktiv (${email})`);
+        } else {
+            updateAdminUi(false, `Kein Adminzugang fuer ${email}`);
+        }
+    } catch (error) {
+        updateAdminUi(false, 'Adminbereich nicht aktiv');
+    }
+}
+
+function parseWordsFromJsonInput(rawText) {
+    const trimmed = rawText.trim();
+    if (!trimmed) {
+        throw new Error('Bitte JSON fuer die Session einfuegen.');
+    }
+
+    // Allow trailing commas in pasted JSON snippets.
+    const sanitized = trimmed.replace(/,\s*([}\]])/g, '$1');
+    let parsed;
+
+    try {
+        parsed = JSON.parse(sanitized);
+    } catch (error) {
+        throw new Error('JSON ist ungueltig. Bitte das Array-Format pruefen.');
+    }
+
+    if (!Array.isArray(parsed)) {
+        throw new Error('JSON muss ein Array sein.');
+    }
+
+    const normalized = parsed.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            throw new Error(`Eintrag ${index + 1} ist kein Objekt.`);
+        }
+
+        const lesson = typeof item.lesson === 'string' ? item.lesson.trim() : '';
+        const section = typeof item.section === 'string' ? item.section.trim() : '';
+        const de = typeof item.de === 'string' ? item.de.trim() : '';
+        const en = typeof item.en === 'string' ? item.en.trim() : '';
+        const fr = typeof item.fr === 'string' ? item.fr.trim() : '';
+
+        if (!de) {
+            throw new Error(`Eintrag ${index + 1} hat kein Feld "de".`);
+        }
+
+        if (!en && !fr) {
+            throw new Error(`Eintrag ${index + 1} braucht "en" oder "fr".`);
+        }
+
+        const normalizedItem = { lesson, section, de };
+        if (en) normalizedItem.en = en;
+        if (fr) normalizedItem.fr = fr;
+        return normalizedItem;
+    });
+
+    if (!normalized.length) {
+        throw new Error('Die Session ist leer.');
+    }
+
+    return normalized;
+}
+
+async function saveSessionFromAdminEditor() {
+    if (!isAdminUser) {
+        throw new Error('Nur Admins koennen Sessions speichern.');
+    }
+
+    const sessionName = adminSessionNameInput.value.trim();
+    if (!sessionName) {
+        throw new Error('Bitte Session-Name eingeben.');
+    }
+
+    const words = parseWordsFromJsonInput(adminJsonInput.value);
+    const client = await ensureClientAndSession();
+
+    const { error } = await client
+        .from('sessions')
+        .upsert({ name: sessionName, words }, { onConflict: 'name' });
+
+    if (error) {
+        throw new Error(error.message || 'Session konnte nicht gespeichert werden.');
+    }
+
+    sessions[sessionName] = words;
+    renderSessionsList();
+    adminExistingSessionSelect.value = sessionName;
+    adminStatus.textContent = `Session gespeichert: ${sessionName} (${words.length} Vokabeln)`;
+}
+
+function loadSessionIntoAdminEditor() {
+    if (!isAdminUser) {
+        alert('Nur Admins koennen Sessions bearbeiten.');
+        return;
+    }
+
+    const selected = adminExistingSessionSelect.value.trim();
+    if (!selected) {
+        alert('Bitte zuerst eine bestehende Session auswaehlen.');
+        return;
+    }
+
+    const words = sessions[selected];
+    if (!Array.isArray(words)) {
+        alert('Session konnte nicht geladen werden.');
+        return;
+    }
+
+    adminSessionNameInput.value = selected;
+    adminJsonInput.value = JSON.stringify(words, null, 2);
+    adminStatus.textContent = `Session geladen: ${selected}`;
+}
+
+async function login() {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+
+    if (!email || !password) {
+        alert('Bitte E-Mail und Passwort eingeben.');
+        return;
+    }
+
+    try {
+        const client = createClientFromInput();
+        persistCredentials();
+
+        const { error } = await client.auth.signInWithPassword({ email, password });
+        if (error) {
+            throw new Error(error.message || 'Anmeldung fehlgeschlagen.');
+        }
+
+        updateAuthUi(true, 'Angemeldet. Du kannst jetzt Sessions laden.');
+        await loadSessionsFromSupabase();
+        await refreshAdminAccess();
+    } catch (error) {
+        supabaseClient = null;
+        updateAuthUi(false, 'Nicht angemeldet');
+        updateAdminUi(false, 'Adminbereich nicht aktiv');
+        alert(error.message);
+    }
+}
+
+async function logout() {
+    try {
+        if (supabaseClient) {
+            await supabaseClient.auth.signOut();
+        }
+    } catch (error) {
+        // Ignore sign-out errors and still clear local UI state.
+    }
+
+    supabaseClient = null;
+    resetTrainingState();
+    renderSessionsList();
+    updateAuthUi(false, 'Nicht angemeldet');
+    updateAdminUi(false, 'Adminbereich nicht aktiv');
+    adminJsonInput.value = '';
+    adminSessionNameInput.value = '';
 }
 
 function showCard() {
@@ -295,7 +468,18 @@ logoutBtn.addEventListener('click', () => {
 loadSessionsBtn.addEventListener('click', async () => {
     try {
         await loadSessionsFromSupabase();
+        await refreshAdminAccess();
     } catch (error) {
+        alert(error.message);
+    }
+});
+
+adminLoadSessionBtn.addEventListener('click', loadSessionIntoAdminEditor);
+adminSaveSessionBtn.addEventListener('click', async () => {
+    try {
+        await saveSessionFromAdminEditor();
+    } catch (error) {
+        adminStatus.textContent = error.message;
         alert(error.message);
     }
 });
@@ -388,6 +572,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadProgress();
     updateProgress();
     renderSessionsList();
+    updateAdminUi(false, 'Adminbereich nicht aktiv');
 
     if (supabaseUrlInput.value && supabaseKeyInput.value) {
         try {
@@ -396,6 +581,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (data && data.session) {
                 updateAuthUi(true, 'Angemeldet. Du kannst jetzt Sessions laden.');
                 await loadSessionsFromSupabase();
+                await refreshAdminAccess();
                 return;
             }
         } catch (error) {
