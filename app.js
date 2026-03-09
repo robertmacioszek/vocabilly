@@ -38,8 +38,10 @@ const adminPanel = document.getElementById('admin-panel');
 const adminSessionNameInput = document.getElementById('admin-session-name-input');
 const adminExistingSessionSelect = document.getElementById('admin-existing-session-select');
 const adminLoadSessionBtn = document.getElementById('admin-load-session-btn');
+const adminDeleteSessionBtn = document.getElementById('admin-delete-session-btn');
 const adminJsonInput = document.getElementById('admin-json-input');
 const adminSaveSessionBtn = document.getElementById('admin-save-session-btn');
+const adminSaveGroupedBtn = document.getElementById('admin-save-grouped-btn');
 const adminStatus = document.getElementById('admin-status');
 
 function saveProgress() {
@@ -312,6 +314,63 @@ async function saveSessionFromAdminEditor() {
     adminStatus.textContent = `Session gespeichert: ${sessionName} (${words.length} Vokabeln)`;
 }
 
+function groupWordsByLessonSection(words) {
+    const groups = {};
+
+    words.forEach((word, index) => {
+        const lesson = (word.lesson || '').trim();
+        const section = (word.section || '').trim();
+
+        let sessionName = '';
+        if (lesson && section) {
+            sessionName = `${lesson}-${section}`;
+        } else if (lesson) {
+            sessionName = lesson;
+        } else if (section) {
+            sessionName = section;
+        } else {
+            sessionName = 'Ungrouped';
+        }
+
+        if (!groups[sessionName]) {
+            groups[sessionName] = [];
+        }
+        groups[sessionName].push(words[index]);
+    });
+
+    return groups;
+}
+
+async function saveGroupedSessionsFromAdminEditor() {
+    if (!isAdminUser) {
+        throw new Error('Nur Admins koennen Sessions speichern.');
+    }
+
+    const words = parseWordsFromJsonInput(adminJsonInput.value);
+    const groups = groupWordsByLessonSection(words);
+    const names = Object.keys(groups);
+    if (!names.length) {
+        throw new Error('Keine Gruppen aus dem JSON erzeugt.');
+    }
+
+    const payload = names.map(name => ({ name, words: groups[name] }));
+    const client = await ensureClientAndSession();
+
+    const { error } = await client
+        .from('sessions')
+        .upsert(payload, { onConflict: 'name' });
+
+    if (error) {
+        throw new Error(error.message || 'Gruppierte Sessions konnten nicht gespeichert werden.');
+    }
+
+    names.forEach(name => {
+        sessions[name] = groups[name];
+    });
+    renderSessionsList();
+    adminStatus.textContent = `Gespeichert: ${names.length} Session(s) (${names.join(', ')})`;
+}
+
 function loadSessionIntoAdminEditor() {
     if (!isAdminUser) {
         alert('Nur Admins koennen Sessions bearbeiten.');
@@ -333,6 +392,43 @@ function loadSessionIntoAdminEditor() {
     adminSessionNameInput.value = selected;
     adminJsonInput.value = JSON.stringify(words, null, 2);
     adminStatus.textContent = `Session geladen: ${selected}`;
+}
+
+async function deleteSelectedSessionFromAdmin() {
+    if (!isAdminUser) {
+        throw new Error('Nur Admins koennen Sessions loeschen.');
+    }
+
+    const selected = adminExistingSessionSelect.value.trim() || adminSessionNameInput.value.trim();
+    if (!selected) {
+        throw new Error('Bitte Session zum Loeschen auswaehlen oder Namen eingeben.');
+    }
+
+    const client = await ensureClientAndSession();
+    const { error } = await client
+        .from('sessions')
+        .delete()
+        .eq('name', selected);
+
+    if (error) {
+        throw new Error(error.message || 'Session konnte nicht geloescht werden.');
+    }
+
+    delete sessions[selected];
+    renderSessionsList();
+    if (currentSessionName === selected) {
+        trainingSession.style.display = 'none';
+        sessionEndDiv.style.display = 'none';
+        currentSessionName = null;
+        vocabList = [];
+        sessionCards = [];
+        correctCards = new Set();
+        saveProgress();
+        updateProgress();
+    }
+    adminSessionNameInput.value = '';
+    adminJsonInput.value = '';
+    adminStatus.textContent = `Session geloescht: ${selected}`;
 }
 
 async function login() {
@@ -478,6 +574,22 @@ adminLoadSessionBtn.addEventListener('click', loadSessionIntoAdminEditor);
 adminSaveSessionBtn.addEventListener('click', async () => {
     try {
         await saveSessionFromAdminEditor();
+    } catch (error) {
+        adminStatus.textContent = error.message;
+        alert(error.message);
+    }
+});
+adminSaveGroupedBtn.addEventListener('click', async () => {
+    try {
+        await saveGroupedSessionsFromAdminEditor();
+    } catch (error) {
+        adminStatus.textContent = error.message;
+        alert(error.message);
+    }
+});
+adminDeleteSessionBtn.addEventListener('click', async () => {
+    try {
+        await deleteSelectedSessionFromAdmin();
     } catch (error) {
         adminStatus.textContent = error.message;
         alert(error.message);

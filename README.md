@@ -74,6 +74,18 @@ with check (
   )
 );
 
+create policy "sessions_delete_admin"
+on public.sessions
+for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.app_admins a
+    where a.email = auth.jwt() ->> 'email'
+  )
+);
+
 create policy "app_admins_select_own_row"
 on public.app_admins
 for select
@@ -158,3 +170,10 @@ Then open:
 
 5. Enter a session name and click `Session speichern/aktualisieren`.
 6. To edit an existing session, select it, click `In Editor laden`, edit JSON, and save again.
+7. To delete an existing session, select it and click `Ausgewaehlte Session loeschen`.
+8. To auto-create multiple sessions, paste mixed JSON and click `Aus JSON nach lesson-section gruppieren und speichern`.
+9. Grouping rules:
+- `lesson + section` -> session name `LESSON-SECTION` (example: `U1-IN`)
+- only `lesson` -> session name `LESSON`
+- only `section` -> session name `SECTION`
+- neither present -> session name `Ungrouped`
