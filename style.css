@@ -67,6 +67,12 @@ textarea {
     width: 100%;
     margin: 6px 0;
 }
+.btn.btn-small {
+    width: auto;
+    padding: 6px 10px;
+    font-size: 0.9em;
+    margin: 0;
+}
 .btn.secondary {
     background: #e9eef6;
 }

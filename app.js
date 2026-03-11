@@ -47,6 +47,47 @@ const adminSaveSessionBtn = document.getElementById('admin-save-session-btn');
 const adminSaveGroupedBtn = document.getElementById('admin-save-grouped-btn');
 const adminStatus = document.getElementById('admin-status');
 
+const viewLogin = document.getElementById('auth-box');
+const viewSessions = document.getElementById('sessions-list');
+const viewAdmin = document.getElementById('admin-panel');
+
+function setView(mode) {
+    if (mode === 'login') {
+        viewLogin.style.display = 'block';
+        viewSessions.style.display = 'none';
+        viewAdmin.style.display = 'none';
+        trainingSession.style.display = 'none';
+        sessionEndDiv.style.display = 'none';
+        return;
+    }
+
+    if (mode === 'sessions') {
+        viewLogin.style.display = 'none';
+        viewSessions.style.display = 'block';
+        viewAdmin.style.display = isAdminUser ? 'block' : 'none';
+        trainingSession.style.display = 'none';
+        sessionEndDiv.style.display = 'none';
+        return;
+    }
+
+    if (mode === 'training') {
+        viewLogin.style.display = 'none';
+        viewSessions.style.display = 'none';
+        viewAdmin.style.display = 'none';
+        trainingSession.style.display = 'block';
+        sessionEndDiv.style.display = 'none';
+        return;
+    }
+
+    if (mode === 'end') {
+        viewLogin.style.display = 'none';
+        viewSessions.style.display = 'none';
+        viewAdmin.style.display = 'none';
+        trainingSession.style.display = 'none';
+        sessionEndDiv.style.display = 'block';
+    }
+}
+
 function saveProgress() {
     localStorage.setItem('correctCards', JSON.stringify(Array.from(correctCards)));
 }
@@ -72,7 +113,6 @@ function updateAuthUi(isLoggedIn, message) {
 
 function updateAdminUi(enabled, message) {
     isAdminUser = enabled;
-    adminPanel.style.display = enabled ? 'block' : 'none';
     adminStatus.textContent = message;
 }
 
@@ -120,8 +160,6 @@ function resetTrainingState() {
     correctCards = new Set();
     saveProgress();
     updateProgress();
-    trainingSession.style.display = 'none';
-    sessionEndDiv.style.display = 'none';
     updateStartSelectedButtonState();
 }
 
@@ -466,6 +504,7 @@ async function deleteSelectedSessionFromAdmin() {
         correctCards = new Set();
         saveProgress();
         updateProgress();
+        setView('sessions');
     }
 
     adminSessionNameInput.value = '';
@@ -494,10 +533,12 @@ async function login() {
         updateAuthUi(true, 'Angemeldet. Du kannst jetzt Sessions laden.');
         await loadSessionsFromSupabase();
         await refreshAdminAccess();
+        setView('sessions');
     } catch (error) {
         supabaseClient = null;
         updateAuthUi(false, 'Nicht angemeldet');
         updateAdminUi(false, 'Adminbereich nicht aktiv');
+        setView('login');
         alert(error.message);
     }
 }
@@ -518,6 +559,7 @@ async function logout() {
     updateAdminUi(false, 'Adminbereich nicht aktiv');
     adminJsonInput.value = '';
     adminSessionNameInput.value = '';
+    setView('login');
 }
 
 function showCard() {
@@ -564,8 +606,6 @@ function nextCard() {
 }
 
 function endSession() {
-    trainingSession.style.display = 'none';
-    sessionEndDiv.style.display = 'block';
     finalScoreDiv.textContent = `Alle Vokabeln richtig beantwortet! (${vocabList.length}/${vocabList.length})`;
     showAnswerBtn.style.display = 'none';
     answerButtonsDiv.style.display = 'none';
@@ -573,6 +613,7 @@ function endSession() {
     correctCards.clear();
     saveProgress();
     updateProgress();
+    setView('end');
 }
 
 async function startTrainingSession(name) {
@@ -609,10 +650,9 @@ async function startTrainingSessionsByNames(names) {
         return;
     }
 
-    trainingSession.style.display = 'block';
-    sessionEndDiv.style.display = 'none';
     showCard();
     updateProgress();
+    setView('training');
 }
 
 loginBtn.addEventListener('click', login);
@@ -723,8 +763,6 @@ btnWrong.addEventListener('click', () => {
 });
 
 cancelSessionBtn.addEventListener('click', () => {
-    trainingSession.style.display = 'none';
-    sessionEndDiv.style.display = 'none';
     vocabList = [];
     sessionCards = [];
     correctCards = new Set();
@@ -735,6 +773,7 @@ cancelSessionBtn.addEventListener('click', () => {
     cancelSessionBtn.style.display = 'none';
     saveProgress();
     updateProgress();
+    setView('sessions');
 });
 
 restartBtn.addEventListener('click', () => {
@@ -751,6 +790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateProgress();
     renderSessionsList();
     updateAdminUi(false, 'Adminbereich nicht aktiv');
+    setView('login');
 
     if (supabaseUrlInput.value && supabaseKeyInput.value) {
         try {
@@ -760,6 +800,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 updateAuthUi(true, 'Angemeldet. Du kannst jetzt Sessions laden.');
                 await loadSessionsFromSupabase();
                 await refreshAdminAccess();
+                setView('sessions');
                 return;
             }
         } catch (error) {
