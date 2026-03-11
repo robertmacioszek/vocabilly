@@ -34,8 +34,20 @@ create table if not exists public.app_admins (
   email text primary key
 );
 
+create table if not exists public.session_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  session_names text[] not null,
+  total_count integer not null default 0,
+  correct_count integer not null default 0,
+  completed boolean not null default false,
+  started_at timestamptz not null default now(),
+  ended_at timestamptz
+);
+
 alter table public.sessions enable row level security;
 alter table public.app_admins enable row level security;
+alter table public.session_history enable row level security;
 
 create policy "sessions_select_authenticated"
 on public.sessions
@@ -91,6 +103,25 @@ on public.app_admins
 for select
 to authenticated
 using (email = auth.jwt() ->> 'email');
+
+create policy "history_select_own"
+on public.session_history
+for select
+to authenticated
+using (user_id = auth.uid());
+
+create policy "history_insert_own"
+on public.session_history
+for insert
+to authenticated
+with check (user_id = auth.uid());
+
+create policy "history_update_own"
+on public.session_history
+for update
+to authenticated
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
 ```
 
 Example seed data:
@@ -145,6 +176,7 @@ Then open:
 4. Load sessions and select one or more sessions with checkboxes.
 5. Click `Session(s) starten` to start a combined training run.
 6. Practice until all cards are marked correct.
+7. Open `Historie` to see completed/canceled sessions.
 
 ## Admin Usage (Session Maintenance)
 1. Add your email to `public.app_admins`.

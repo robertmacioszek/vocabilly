@@ -45,10 +45,22 @@
         <section id="sessions-list" data-view="sessions" style="margin-bottom:24px;">
             <div class="row" style="display:flex; justify-content:space-between; align-items:center;">
                 <h3 style="margin:0;">Verfuegbare Sessions</h3>
-                <button id="logout-btn" class="btn btn-small secondary">Abmelden</button>
+                <div style="display:flex; gap:8px;">
+                    <button id="open-history-btn" class="btn btn-small secondary">Historie</button>
+                    <button id="logout-btn" class="btn btn-small secondary">Abmelden</button>
+                </div>
             </div>
             <ul id="sessions-ul" style="list-style:none; padding:0;"></ul>
             <button id="start-selected-sessions-btn" class="btn full" disabled>Session(s) starten</button>
+        </section>
+
+        <section id="history-view" data-view="history" style="display:none; margin-bottom:24px;">
+            <div class="row" style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">Historie</h3>
+                <button id="back-to-sessions-btn" class="btn btn-small secondary">Zurueck</button>
+            </div>
+            <div id="history-status" class="status">Keine Daten geladen.</div>
+            <ul id="history-list" style="list-style:none; padding:0;"></ul>
         </section>
 
         <section id="admin-panel" data-view="admin" style="display:none; margin-bottom:24px;">

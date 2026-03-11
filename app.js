@@ -1,4 +1,4 @@
-// Vocabilly client logic with Supabase backend and admin editor.
+// Vocabilly client logic with Supabase backend, admin editor, and history tracking.
 
 let supabaseClient = null;
 let vocabList = [];
@@ -8,6 +8,8 @@ let currentIndex = 0;
 let sessions = {};
 let currentSessionName = null;
 let currentTrainingSessionNames = [];
+let currentHistoryId = null;
+let historyFinalized = false;
 let answerShown = false;
 let isAdminUser = false;
 let selectedSessionNames = new Set();
@@ -49,15 +51,22 @@ const adminSaveSessionBtn = document.getElementById('admin-save-session-btn');
 const adminSaveGroupedBtn = document.getElementById('admin-save-grouped-btn');
 const adminStatus = document.getElementById('admin-status');
 
+const openHistoryBtn = document.getElementById('open-history-btn');
+const backToSessionsBtn = document.getElementById('back-to-sessions-btn');
+const historyList = document.getElementById('history-list');
+const historyStatus = document.getElementById('history-status');
+
 const viewLogin = document.getElementById('auth-box');
 const viewSessions = document.getElementById('sessions-list');
 const viewAdmin = document.getElementById('admin-panel');
+const viewHistory = document.getElementById('history-view');
 
 function setView(mode) {
     if (mode === 'login') {
         viewLogin.style.display = 'block';
         viewSessions.style.display = 'none';
         viewAdmin.style.display = 'none';
+        viewHistory.style.display = 'none';
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'none';
         progressRow.style.display = 'none';
@@ -68,6 +77,18 @@ function setView(mode) {
         viewLogin.style.display = 'none';
         viewSessions.style.display = 'block';
         viewAdmin.style.display = isAdminUser ? 'block' : 'none';
+        viewHistory.style.display = 'none';
+        trainingSession.style.display = 'none';
+        sessionEndDiv.style.display = 'none';
+        progressRow.style.display = 'none';
+        return;
+    }
+
+    if (mode === 'history') {
+        viewLogin.style.display = 'none';
+        viewSessions.style.display = 'none';
+        viewAdmin.style.display = 'none';
+        viewHistory.style.display = 'block';
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'none';
         progressRow.style.display = 'none';
@@ -78,6 +99,7 @@ function setView(mode) {
         viewLogin.style.display = 'none';
         viewSessions.style.display = 'none';
         viewAdmin.style.display = 'none';
+        viewHistory.style.display = 'none';
         trainingSession.style.display = 'block';
         sessionEndDiv.style.display = 'none';
         progressRow.style.display = 'flex';
@@ -88,6 +110,7 @@ function setView(mode) {
         viewLogin.style.display = 'none';
         viewSessions.style.display = 'none';
         viewAdmin.style.display = 'none';
+        viewHistory.style.display = 'none';
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'block';
         progressRow.style.display = 'flex';
@@ -166,6 +189,8 @@ function resetTrainingState() {
     selectedSessionNames = new Set();
     currentSessionName = null;
     currentTrainingSessionNames = [];
+    currentHistoryId = null;
+    historyFinalized = false;
     vocabList = [];
     sessionCards = [];
     correctCards = new Set();
@@ -251,6 +276,119 @@ function renderSessionsList() {
     updateStartSelectedButtonState();
 }
 
+function formatTimestamp(value) {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) {
+        return '-';
+    }
+    return date.toLocaleString();
+}
+
+function renderHistory(entries) {
+    historyList.innerHTML = '';
+
+    if (!entries || !entries.length) {
+        historyStatus.textContent = 'Keine Historie vorhanden.';
+        return;
+    }
+
+    historyStatus.textContent = `${entries.length} Eintrag(e)`;
+
+    entries.forEach(entry => {
+        const li = document.createElement('li');
+        const sessionNames = Array.isArray(entry.session_names)
+            ? entry.session_names.join(', ')
+            : '-';
+        const started = formatTimestamp(entry.started_at);
+        const ended = formatTimestamp(entry.ended_at);
+        const status = entry.completed
+            ? 'Abgeschlossen'
+            : `Abgebrochen (${entry.correct_count}/${entry.total_count})`;
+
+        li.innerHTML = `
+            <div><strong>${sessionNames}</strong></div>
+            <div style="color:#666;">Start: ${started}</div>
+            <div style="color:#666;">Ende: ${ended}</div>
+            <div>${status}</div>
+        `;
+        historyList.appendChild(li);
+    });
+}
+
+async function loadHistory() {
+    historyStatus.textContent = 'Lade Historie...';
+    historyList.innerHTML = '';
+
+    const client = await ensureClientAndSession();
+    const { data, error } = await client
+        .from('session_history')
+        .select('id, session_names, total_count, correct_count, completed, started_at, ended_at')
+        .order('started_at', { ascending: false });
+
+    if (error) {
+        historyStatus.textContent = error.message || 'Historie konnte nicht geladen werden.';
+        return;
+    }
+
+    renderHistory(data || []);
+}
+
+async function startHistoryEntry(sessionNames) {
+    const client = await ensureClientAndSession();
+    const userId = await getCurrentUserId();
+    const payload = {
+        user_id: userId,
+        session_names: sessionNames,
+        total_count: vocabList.length,
+        correct_count: 0,
+        completed: false,
+        started_at: new Date().toISOString(),
+        ended_at: null
+    };
+
+    const { data, error } = await client
+        .from('session_history')
+        .insert(payload)
+        .select('id')
+        .single();
+
+    if (error) {
+        currentHistoryId = null;
+        historyFinalized = false;
+        return;
+    }
+
+    currentHistoryId = data ? data.id : null;
+    historyFinalized = false;
+}
+
+async function finalizeHistoryEntry(completed, correctCount, totalCount) {
+    if (!currentHistoryId) {
+        return;
+    }
+    if (historyFinalized) {
+        return;
+    }
+
+    const resolvedCorrect = typeof correctCount === 'number' ? correctCount : correctCards.size;
+    const resolvedTotal = typeof totalCount === 'number' ? totalCount : vocabList.length;
+
+    const client = await ensureClientAndSession();
+    const payload = {
+        correct_count: resolvedCorrect,
+        total_count: resolvedTotal,
+        completed,
+        ended_at: new Date().toISOString()
+    };
+
+    await client
+        .from('session_history')
+        .update(payload)
+        .eq('id', currentHistoryId);
+
+    historyFinalized = true;
+}
+
 async function ensureClientAndSession() {
     const client = supabaseClient || createClientFromInput();
     const { data, error } = await client.auth.getSession();
@@ -264,6 +402,15 @@ async function ensureClientAndSession() {
     }
 
     return client;
+}
+
+async function getCurrentUserId() {
+    const client = await ensureClientAndSession();
+    const { data, error } = await client.auth.getSession();
+    if (error || !data.session || !data.session.user) {
+        throw new Error('Benutzer konnte nicht ermittelt werden.');
+    }
+    return data.session.user.id;
 }
 
 async function loadSessionsFromSupabase() {
@@ -615,10 +762,13 @@ function nextCard() {
     updateProgress();
 }
 
-function endSession() {
+async function endSession() {
     finalScoreDiv.textContent = `Alle Vokabeln richtig beantwortet! (${vocabList.length}/${vocabList.length})`;
     showAnswerBtn.style.display = 'none';
     answerButtonsDiv.style.display = 'none';
+    const finalCorrect = correctCards.size;
+    const finalTotal = vocabList.length;
+    await finalizeHistoryEntry(true, finalCorrect, finalTotal);
     correctCards.clear();
     saveProgress();
     updateProgress();
@@ -649,6 +799,7 @@ async function startTrainingSessionsByNames(names) {
     vocabList = combined;
     currentTrainingSessionNames = [...names];
     currentSessionName = names.length === 1 ? names[0] : `${names.length} Sessions`;
+    historyFinalized = false;
     correctCards = new Set();
     saveProgress();
     currentIndex = 0;
@@ -662,6 +813,7 @@ async function startTrainingSessionsByNames(names) {
     showCard();
     updateProgress();
     setView('training');
+    await startHistoryEntry(currentTrainingSessionNames);
 }
 
 loginBtn.addEventListener('click', login);
@@ -682,6 +834,18 @@ startSelectedSessionsBtn.addEventListener('click', async () => {
     } catch (error) {
         alert(error.message);
     }
+});
+
+openHistoryBtn.addEventListener('click', async () => {
+    try {
+        await loadHistory();
+        setView('history');
+    } catch (error) {
+        alert(error.message);
+    }
+});
+backToSessionsBtn.addEventListener('click', () => {
+    setView('sessions');
 });
 
 adminLoadSessionBtn.addEventListener('click', loadSessionIntoAdminEditor);
@@ -757,6 +921,7 @@ btnCorrect.addEventListener('click', () => {
     if (idx >= 0) {
         correctCards.add(idx);
         saveProgress();
+        updateProgress();
     }
 
     nextCard();
@@ -771,7 +936,13 @@ btnWrong.addEventListener('click', () => {
     setTimeout(nextCard, 1200);
 });
 
-cancelSessionBtn.addEventListener('click', () => {
+cancelSessionBtn.addEventListener('click', async () => {
+    if (sessionEndDiv.style.display === 'block') {
+        setView('sessions');
+        return;
+    }
+    const finalCorrect = correctCards.size;
+    const finalTotal = vocabList.length;
     vocabList = [];
     sessionCards = [];
     correctCards = new Set();
@@ -781,6 +952,7 @@ cancelSessionBtn.addEventListener('click', () => {
     answerButtonsDiv.style.display = 'none';
     saveProgress();
     updateProgress();
+    await finalizeHistoryEntry(false, finalCorrect, finalTotal);
     setView('sessions');
 });
 

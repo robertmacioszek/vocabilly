@@ -155,3 +155,8 @@ button {
     max-height: 300px;
     overflow-y: auto;
 }
+#history-list li {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
