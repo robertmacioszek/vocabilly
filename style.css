@@ -167,6 +167,11 @@ button {
     max-height: 300px;
     overflow-y: auto;
 }
+.session-preview {
+    background: #f7f9fc;
+    padding: 8px 10px;
+    border-radius: 8px;
+}
 #history-list li {
     margin-bottom: 10px;
     padding-bottom: 10px;

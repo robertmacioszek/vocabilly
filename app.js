@@ -13,6 +13,7 @@ let historyFinalized = false;
 let answerShown = false;
 let isAdminUser = false;
 let selectedSessionNames = new Set();
+let expandedPreviewNames = new Set();
 
 const trainingSession = document.getElementById('training-session');
 const wordDiv = document.getElementById('word');
@@ -168,6 +169,54 @@ function loadPersistedCredentials() {
     passwordInput.value = localStorage.getItem('supabasePassword') || '';
 }
 
+function applyUrlCredentials() {
+    const params = new URLSearchParams(window.location.search);
+    const url = params.get('sbUrl');
+    const anonKey = params.get('sbKey');
+
+    if (url) {
+        supabaseUrlInput.value = url;
+    }
+    if (anonKey) {
+        supabaseKeyInput.value = anonKey;
+    }
+}
+
+function applyHashCredentials() {
+    if (!window.location.hash) {
+        return;
+    }
+    const hash = window.location.hash.replace(/^#/, '');
+    if (!hash) {
+        return;
+    }
+    const params = new URLSearchParams(hash);
+    const url = params.get('sbUrl');
+    const anonKey = params.get('sbKey');
+
+    if (url) {
+        supabaseUrlInput.value = url;
+    }
+    if (anonKey) {
+        supabaseKeyInput.value = anonKey;
+    }
+}
+
+function updateSupabaseInputsVisibility() {
+    const hasUrl = supabaseUrlInput.value.trim().length > 0;
+    const hasKey = supabaseKeyInput.value.trim().length > 0;
+    const shouldHide = hasUrl && hasKey;
+
+    const urlLabel = document.querySelector('label[for=\"supabase-url-input\"]');
+    const keyLabel = document.querySelector('label[for=\"supabase-key-input\"]');
+
+    const displayValue = shouldHide ? 'none' : 'block';
+    if (urlLabel) urlLabel.style.display = displayValue;
+    if (supabaseUrlInput) supabaseUrlInput.style.display = displayValue;
+    if (keyLabel) keyLabel.style.display = displayValue;
+    if (supabaseKeyInput) supabaseKeyInput.style.display = displayValue;
+}
+
 function createClientFromInput() {
     const url = supabaseUrlInput.value.trim();
     const anonKey = supabaseKeyInput.value.trim();
@@ -187,6 +236,7 @@ function createClientFromInput() {
 function resetTrainingState() {
     sessions = {};
     selectedSessionNames = new Set();
+    expandedPreviewNames = new Set();
     currentSessionName = null;
     currentTrainingSessionNames = [];
     currentHistoryId = null;
@@ -227,11 +277,18 @@ function renderSessionsList() {
         return;
     }
 
+    expandedPreviewNames = new Set([...expandedPreviewNames].filter(name => names.includes(name)));
+
     names.sort((a, b) => a.localeCompare(b)).forEach(name => {
         const li = document.createElement('li');
         li.style.display = 'flex';
-        li.style.alignItems = 'center';
-        li.style.justifyContent = 'space-between';
+        li.style.flexDirection = 'column';
+        li.style.gap = '6px';
+
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.justifyContent = 'space-between';
 
         const left = document.createElement('label');
         left.style.display = 'flex';
@@ -247,16 +304,44 @@ function renderSessionsList() {
         const title = document.createElement('span');
         title.style.fontWeight = '500';
         title.textContent = name;
+        title.title = buildSessionPreview(sessions[name]);
 
         left.appendChild(checkbox);
         left.appendChild(title);
+
+        const right = document.createElement('div');
+        right.style.display = 'flex';
+        right.style.alignItems = 'center';
+        right.style.gap = '8px';
 
         const count = document.createElement('span');
         count.style.color = '#888';
         count.textContent = `(${sessions[name].length} Vokabeln)`;
 
-        li.appendChild(left);
-        li.appendChild(count);
+        const previewBtn = document.createElement('button');
+        previewBtn.type = 'button';
+        previewBtn.className = 'btn btn-small secondary';
+        previewBtn.dataset.name = name;
+        previewBtn.textContent = expandedPreviewNames.has(name) ? 'Vorschau ausblenden' : 'Vorschau';
+
+        right.appendChild(count);
+        right.appendChild(previewBtn);
+
+        row.appendChild(left);
+        row.appendChild(right);
+
+        const preview = document.createElement('div');
+        preview.className = 'session-preview';
+        preview.style.display = expandedPreviewNames.has(name) ? 'block' : 'none';
+        preview.style.color = '#666';
+        preview.style.fontSize = '0.95em';
+        preview.style.lineHeight = '1.4';
+
+        const lines = buildSessionPreviewLines(sessions[name]);
+        preview.innerHTML = lines.map(line => `<div>${line}</div>`).join('');
+
+        li.appendChild(row);
+        li.appendChild(preview);
         sessionsUl.appendChild(li);
     });
 
@@ -272,8 +357,57 @@ function renderSessionsList() {
         });
     });
 
+    sessionsUl.querySelectorAll('button[data-name]').forEach(button => {
+        button.addEventListener('click', () => {
+            const name = button.dataset.name;
+            if (expandedPreviewNames.has(name)) {
+                expandedPreviewNames.delete(name);
+            } else {
+                expandedPreviewNames.add(name);
+            }
+            renderSessionsList();
+        });
+    });
+
     refreshAdminSessionSelect();
     updateStartSelectedButtonState();
+}
+
+function buildSessionPreview(words) {
+    if (!Array.isArray(words) || words.length === 0) {
+        return 'Keine Vokabeln vorhanden.';
+    }
+
+    const sample = words.slice(0, 5).map(entry => {
+        const de = entry.de || '';
+        const en = entry.en || '';
+        const fr = entry.fr || '';
+        const translation = en || fr || '';
+        if (translation) {
+            return `${de} — ${translation}`;
+        }
+        return de;
+    });
+
+    const suffix = words.length > sample.length ? ' …' : '';
+    return `Vorschau (${words.length}): ${sample.join(' | ')}${suffix}`;
+}
+
+function buildSessionPreviewLines(words) {
+    if (!Array.isArray(words) || words.length === 0) {
+        return ['Keine Vokabeln vorhanden.'];
+    }
+
+    return words.slice(0, 10).map(entry => {
+        const de = entry.de || '';
+        const en = entry.en || '';
+        const fr = entry.fr || '';
+        const translation = en || fr || '';
+        if (translation) {
+            return `${de} — ${translation}`;
+        }
+        return de;
+    });
 }
 
 function formatTimestamp(value) {
@@ -966,6 +1100,9 @@ restartBtn.addEventListener('click', () => {
 
 document.addEventListener('DOMContentLoaded', async () => {
     loadPersistedCredentials();
+    applyUrlCredentials();
+    applyHashCredentials();
+    updateSupabaseInputsVisibility();
     loadProgress();
     updateProgress();
     renderSessionsList();

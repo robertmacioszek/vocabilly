@@ -178,6 +178,21 @@ Then open:
 6. Practice until all cards are marked correct.
 7. Open `Historie` to see completed/canceled sessions.
 
+## URL Prefill (Supabase URL + Anon Key)
+You can prefill Supabase settings directly in the link so they do not need to be typed.
+
+Query parameters:
+```text
+?sbUrl=https%3A%2F%2Fxxxxx.supabase.co&sbKey=YOUR_ANON_KEY
+```
+
+Hash parameters (recommended, not sent to server logs):
+```text
+#sbUrl=https%3A%2F%2Fxxxxx.supabase.co&sbKey=YOUR_ANON_KEY
+```
+
+If both values are present, the URL/key inputs are hidden automatically.
+
 ## Admin Usage (Session Maintenance)
 1. Add your email to `public.app_admins`.
 2. Sign in with that user.
