@@ -19,6 +19,8 @@ const btnCorrect = document.getElementById('btn-correct');
 const btnWrong = document.getElementById('btn-wrong');
 const feedbackDiv = document.getElementById('feedback');
 const progressDiv = document.getElementById('progress');
+const progressRow = document.getElementById('progress-row');
+const progressBarFill = document.getElementById('progress-bar-fill');
 const sessionEndDiv = document.getElementById('session-end');
 const finalScoreDiv = document.getElementById('final-score');
 const restartBtn = document.getElementById('restart-btn');
@@ -58,6 +60,7 @@ function setView(mode) {
         viewAdmin.style.display = 'none';
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'none';
+        progressRow.style.display = 'none';
         return;
     }
 
@@ -67,6 +70,7 @@ function setView(mode) {
         viewAdmin.style.display = isAdminUser ? 'block' : 'none';
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'none';
+        progressRow.style.display = 'none';
         return;
     }
 
@@ -76,6 +80,7 @@ function setView(mode) {
         viewAdmin.style.display = 'none';
         trainingSession.style.display = 'block';
         sessionEndDiv.style.display = 'none';
+        progressRow.style.display = 'flex';
         return;
     }
 
@@ -85,6 +90,7 @@ function setView(mode) {
         viewAdmin.style.display = 'none';
         trainingSession.style.display = 'none';
         sessionEndDiv.style.display = 'block';
+        progressRow.style.display = 'flex';
     }
 }
 
@@ -100,8 +106,13 @@ function loadProgress() {
 }
 
 function updateProgress() {
-    progressDiv.textContent = `Fortschritt: ${correctCards.size}/${vocabList.length}` +
+    const total = vocabList.length;
+    const current = correctCards.size;
+    progressDiv.textContent = `Fortschritt: ${current}/${total}` +
         (currentSessionName ? ` (${currentSessionName})` : '');
+
+    const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+    progressBarFill.style.width = `${percent}%`;
 }
 
 function updateAuthUi(isLoggedIn, message) {
@@ -587,7 +598,6 @@ function showCard() {
     showAnswerBtn.disabled = false;
     showAnswerBtn.style.display = 'block';
     answerButtonsDiv.style.display = 'none';
-    cancelSessionBtn.style.display = 'block';
     answerShown = false;
 }
 
@@ -609,7 +619,6 @@ function endSession() {
     finalScoreDiv.textContent = `Alle Vokabeln richtig beantwortet! (${vocabList.length}/${vocabList.length})`;
     showAnswerBtn.style.display = 'none';
     answerButtonsDiv.style.display = 'none';
-    cancelSessionBtn.style.display = 'none';
     correctCards.clear();
     saveProgress();
     updateProgress();
@@ -770,7 +779,6 @@ cancelSessionBtn.addEventListener('click', () => {
     currentTrainingSessionNames = [];
     showAnswerBtn.style.display = 'none';
     answerButtonsDiv.style.display = 'none';
-    cancelSessionBtn.style.display = 'none';
     saveProgress();
     updateProgress();
     setView('sessions');

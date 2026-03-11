@@ -15,7 +15,13 @@
 <body>
     <div id="app" class="card">
         <h1>Vocabilly</h1>
-        <div id="progress">Fortschritt: 0/0</div>
+        <div id="progress-row">
+            <div id="progress">Fortschritt: 0/0</div>
+            <button id="cancel-session" class="btn btn-small secondary">Session beenden</button>
+        </div>
+        <div id="progress-bar">
+            <div id="progress-bar-fill"></div>
+        </div>
 
         <section id="auth-box" data-view="login">
             <h3>Supabase Login</h3>
@@ -78,7 +84,6 @@
                     <button id="btn-wrong" class="btn">Falsch</button>
                 </div>
                 <div id="feedback" style="text-align:center; min-height:24px; font-size:1em;"></div>
-                <button id="cancel-session" class="btn full secondary">Session beenden</button>
             </div>
         </div>
 
