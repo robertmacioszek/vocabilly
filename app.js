@@ -14,6 +14,7 @@ let answerShown = false;
 let isAdminUser = false;
 let selectedSessionNames = new Set();
 let expandedPreviewNames = new Set();
+let sessionRatings = {};
 
 const trainingSession = document.getElementById('training-session');
 const wordDiv = document.getElementById('word');
@@ -318,6 +319,18 @@ function renderSessionsList() {
         count.style.color = '#888';
         count.textContent = `(${sessions[name].length} Vokabeln)`;
 
+        const ratingInfo = getSessionRating(name);
+        const stars = document.createElement('div');
+        stars.className = 'star-rating';
+        if (ratingInfo.perfect) {
+            stars.classList.add('perfect');
+        }
+        stars.innerHTML = `
+            <span class="${ratingInfo.stars >= 1 ? 'filled' : 'empty'}">&#9733;</span>
+            <span class="${ratingInfo.stars >= 2 ? 'filled' : 'empty'}">&#9733;</span>
+            <span class="${ratingInfo.stars >= 3 ? 'filled' : 'empty'}">&#9733;</span>
+        `;
+
         const previewBtn = document.createElement('button');
         previewBtn.type = 'button';
         previewBtn.className = 'btn btn-small secondary';
@@ -325,6 +338,7 @@ function renderSessionsList() {
         previewBtn.textContent = expandedPreviewNames.has(name) ? 'Vorschau ausblenden' : 'Vorschau';
 
         right.appendChild(count);
+        right.appendChild(stars);
         right.appendChild(previewBtn);
 
         row.appendChild(left);
@@ -449,6 +463,71 @@ function renderHistory(entries) {
     });
 }
 
+function updateSessionRatingsFromHistory(entries) {
+    const ratings = {};
+
+    (entries || []).forEach(entry => {
+        const names = Array.isArray(entry.session_names) ? entry.session_names : [];
+        const total = typeof entry.total_count === 'number' ? entry.total_count : 0;
+        const correct = typeof entry.correct_count === 'number' ? entry.correct_count : 0;
+        const ratio = total > 0 ? correct / total : 0;
+        const isPerfect = Boolean(entry.completed) && total > 0 && correct === total;
+
+        names.forEach(name => {
+            if (!ratings[name]) {
+                ratings[name] = { bestRatio: ratio, bestCorrect: correct, bestTotal: total, perfect: isPerfect };
+                return;
+            }
+
+            const current = ratings[name];
+            if (ratio > current.bestRatio) {
+                ratings[name] = { bestRatio: ratio, bestCorrect: correct, bestTotal: total, perfect: current.perfect || isPerfect };
+            } else if (ratio === current.bestRatio && total > current.bestTotal) {
+                ratings[name] = { bestRatio: ratio, bestCorrect: correct, bestTotal: total, perfect: current.perfect || isPerfect };
+            } else if (isPerfect) {
+                current.perfect = true;
+            }
+        });
+    });
+
+    sessionRatings = ratings;
+}
+
+function getSessionRating(name) {
+    const stats = sessionRatings[name];
+    if (!stats || stats.bestTotal === 0) {
+        return { stars: 0, perfect: false };
+    }
+
+    const correct = stats.bestCorrect;
+    const total = stats.bestTotal;
+    let stars = 0;
+
+    if (correct >= 1) stars = 1;
+    if (correct > total / 2) stars = 2;
+    if (correct === total) stars = 3;
+
+    return { stars, perfect: stats.perfect && stars === 3 };
+}
+
+async function loadHistorySummary() {
+    try {
+        const client = await ensureClientAndSession();
+        const { data, error } = await client
+            .from('session_history')
+            .select('session_names, total_count, correct_count, completed');
+
+        if (error) {
+            sessionRatings = {};
+            return;
+        }
+
+        updateSessionRatingsFromHistory(data || []);
+    } catch (error) {
+        sessionRatings = {};
+    }
+}
+
 async function loadHistory() {
     historyStatus.textContent = 'Lade Historie...';
     historyList.innerHTML = '';
@@ -521,6 +600,8 @@ async function finalizeHistoryEntry(completed, correctCount, totalCount) {
         .eq('id', currentHistoryId);
 
     historyFinalized = true;
+    await loadHistorySummary();
+    renderSessionsList();
 }
 
 async function ensureClientAndSession() {
@@ -565,6 +646,7 @@ async function loadSessionsFromSupabase() {
         sessions[row.name] = words;
     });
 
+    await loadHistorySummary();
     renderSessionsList();
 }
 
@@ -784,6 +866,8 @@ async function deleteSelectedSessionFromAdmin() {
 
     delete sessions[selected];
     selectedSessionNames.delete(selected);
+    expandedPreviewNames.delete(selected);
+    delete sessionRatings[selected];
     renderSessionsList();
 
     if (currentTrainingSessionNames.includes(selected)) {

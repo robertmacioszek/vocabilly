@@ -172,6 +172,22 @@ button {
     padding: 8px 10px;
     border-radius: 8px;
 }
+.star-rating {
+    display: inline-flex;
+    gap: 2px;
+    font-size: 1em;
+    line-height: 1;
+}
+.star-rating .filled {
+    color: #f5a623;
+}
+.star-rating .empty {
+    color: #cfd6e4;
+}
+.star-rating.perfect .filled {
+    color: #ffcc33;
+    text-shadow: 0 0 6px rgba(255, 204, 51, 0.6);
+}
 #history-list li {
     margin-bottom: 10px;
     padding-bottom: 10px;
